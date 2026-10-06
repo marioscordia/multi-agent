@@ -1,0 +1,25 @@
+# env / secrets
+.env
+.venv/
+venv/
+
+# python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.ruff_cache/
+
+# data, weights, run artifacts (never committed)
+data/raw/
+data/weights/
+data/cases/
+data/channel/
+data/*.sqlite3
+logs/
+*.mp4
+*.avi
+*.pt
+
+# os
+.DS_Store

@@ -1,0 +1,103 @@
+{
+  "policy_id": "school-safety-v1",
+  "title": "School Safety Violation Classification Policy (illustrative)",
+  "note": "Illustrative policy authored for this project from the safeguarding categories and research gaps identified in the stage-1 literature review. Not a legal document.",
+  "escalation_tiers": {
+    "1": "log",
+    "2": "notify_staff",
+    "3": "notify_admin",
+    "4": "emergency"
+  },
+  "clauses": [
+    {
+      "id": "SSP-1.1",
+      "category": "physical_violence",
+      "title": "Student-on-student physical altercation",
+      "severity": 3,
+      "indicators": [
+        "two or more persons in sustained close contact",
+        "rapid limb extension consistent with striking",
+        "high motion variance localized to a small region"
+      ],
+      "response": "Notify duty administrator; nearest staff member attends within 60 seconds.",
+      "keywords": ["fight", "punch", "kick", "altercation", "brawl", "violence"]
+    },
+    {
+      "id": "SSP-1.2",
+      "category": "weapon_threat",
+      "title": "Weapon or weapon-like object present",
+      "severity": 4,
+      "indicators": [
+        "detector reports knife, firearm or weapon-like object with confidence above threshold",
+        "object held or brandished rather than carried in a bag"
+      ],
+      "response": "Immediate emergency escalation; lockdown procedure per school protocol.",
+      "keywords": ["weapon", "knife", "gun", "firearm", "blade"]
+    },
+    {
+      "id": "SSP-2.1",
+      "category": "adult_on_child_abuse",
+      "title": "Adult-on-child physical coercion",
+      "severity": 4,
+      "indicators": [
+        "marked height or bounding-box scale disparity between the interacting persons",
+        "one person restraining, pulling or striking a markedly smaller person",
+        "the smaller person withdrawing or being moved against their motion direction"
+      ],
+      "response": "Immediate safeguarding escalation; preserve footage under child-protection retention rules.",
+      "keywords": ["abuse", "child abuse", "coercion", "restraint", "safeguarding", "adult"]
+    },
+    {
+      "id": "SSP-3.1",
+      "category": "bullying_nonphysical",
+      "title": "Repeated targeting without physical contact",
+      "severity": 2,
+      "indicators": [
+        "a group persistently surrounding one isolated individual",
+        "low physical contact but sustained encirclement",
+        "the isolated individual repeatedly attempting to exit the cluster"
+      ],
+      "response": "Notify class teacher and pastoral lead for follow-up; no emergency response.",
+      "keywords": ["bullying", "harassment", "intimidation", "encirclement", "exclusion"]
+    },
+    {
+      "id": "SSP-4.1",
+      "category": "rough_play_benign",
+      "title": "Rough play, sport or celebration (no violation)",
+      "severity": 1,
+      "indicators": [
+        "high motion with mutual, reciprocal engagement",
+        "no asymmetry of advantage between participants",
+        "context is a sports area, break period or organized activity"
+      ],
+      "response": "Log only. Suppress alert. This is the dominant false-positive class in the reviewed literature.",
+      "keywords": ["play", "sport", "game", "horseplay", "celebration", "wrestling practice"]
+    },
+    {
+      "id": "SSP-0.1",
+      "category": "no_violation",
+      "title": "Ordinary movement",
+      "severity": 1,
+      "indicators": ["walking, queuing, dispersing", "no contact, no abnormal motion"],
+      "response": "Log only; no notification.",
+      "keywords": ["walking", "corridor", "normal", "queue"]
+    }
+  ],
+  "privacy_rules": [
+    {
+      "id": "PR-1",
+      "rule": "Faces in any frame retained or transmitted must be blurred before the frame leaves the detection pipeline.",
+      "rationale": "Only 2 of the 50 reviewed studies addressed privacy at all; continuous monitoring of minors demands redaction by default."
+    },
+    {
+      "id": "PR-2",
+      "rule": "Reasoning stages that use an external LLM receive aggregated numeric features and text only, never frames or crops.",
+      "rationale": "Keeps identifiable imagery inside the local pipeline."
+    },
+    {
+      "id": "PR-3",
+      "rule": "Reports carry no names or identifiers, only camera id, timestamp and track numbers.",
+      "rationale": "An alert should be actionable without pre-judging who is involved."
+    }
+  ]
+}

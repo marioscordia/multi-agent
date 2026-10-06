@@ -1,0 +1,31 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "safeschool-agents"
+version = "0.2.0"
+description = "Multi-agent system for detecting safety violations and child abuse in educational institutions"
+requires-python = ">=3.11"
+dependencies = [
+  "pydantic>=2.7",
+  "pydantic-settings>=2.3",
+  "typer>=0.12",
+  "python-dotenv>=1.0",
+  "numpy>=1.26",
+  "anthropic>=0.40",
+]
+
+[project.optional-dependencies]
+cv = ["opencv-python>=4.9", "ultralytics>=8.2"]
+dev = ["pytest>=8.0"]
+
+[project.scripts]
+safeschool = "safeschool.cli:app"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+pythonpath = ["src"]
+testpaths = ["tests"]

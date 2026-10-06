@@ -1,0 +1,3 @@
+# Optional heavy stack for real inference. Without it the system runs in fixture mode.
+opencv-python>=4.9
+ultralytics>=8.2
