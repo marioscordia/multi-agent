@@ -123,7 +123,7 @@ def demo(
                 f"\n  - {scenario.name}: SKIPPED (missing {path}; run scripts/fetch_samples.py)",
                 fg=typer.colors.BRIGHT_BLACK,
             )
-            rows.append((scenario.name, "skipped", "-", True))
+            rows.append((scenario.name, "skipped", "-", None))
             continue
 
         typer.echo(f"\n  - {scenario.name}: {scenario.description}")
@@ -136,14 +136,23 @@ def demo(
         typer.secho(f"    expected {scenario.expectation()} | got {actual}", fg=colour)
         rows.append((scenario.name, actual, scenario.expectation(), ok))
 
-    passed = sum(1 for *_, ok in rows if ok)
-    _banner(f"{passed}/{len(rows)} scenarios met expectations")
+    # a skipped scenario is neither a pass nor a failure: counting it as a pass
+    # would overstate the result on a checkout without the sample videos
+    ran = [r for r in rows if r[3] is not None]
+    passed = sum(1 for *_, ok in ran if ok)
+    skipped = len(rows) - len(ran)
+    headline = f"{passed}/{len(ran)} scenarios met expectations"
+    if skipped:
+        headline += f"  ({skipped} skipped — run scripts/fetch_samples.py for the video inputs)"
+    _banner(headline)
     for name, actual, expected, ok in rows:
-        typer.secho(
-            f"  {'PASS' if ok else 'FAIL'}  {name:22s} {actual:28s} (expected {expected})",
-            fg=typer.colors.GREEN if ok else typer.colors.RED,
+        label = "SKIP" if ok is None else ("PASS" if ok else "FAIL")
+        colour = (
+            typer.colors.BRIGHT_BLACK if ok is None
+            else (typer.colors.GREEN if ok else typer.colors.RED)
         )
-    raise typer.Exit(0 if passed == len(rows) else 1)
+        typer.secho(f"  {label}  {name:22s} {actual:28s} (expected {expected})", fg=colour)
+    raise typer.Exit(0 if passed == len(ran) else 1)
 
 
 @app.command()
