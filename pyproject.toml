@@ -19,6 +19,7 @@ dependencies = [
 [project.optional-dependencies]
 cv = ["opencv-python>=4.9", "ultralytics>=8.2"]
 dev = ["pytest>=8.0"]
+docs = ["python-docx>=1.1"]   # scripts/make_docx.py; also needs pandoc on PATH
 
 [project.scripts]
 safeschool = "safeschool.cli:app"

@@ -142,6 +142,12 @@ cp .env.example .env        # then put your key in it; .env is gitignored
 | `safeschool load [log]` | per-agent call share (the ≤40% check) |
 | `safeschool cases` / `show <id>` | inspect stored case files |
 
+To export any project document to Word (A4, Times New Roman, styled tables):
+
+```bash
+python scripts/make_docx.py docs/AGENTS_AND_COMMUNICATION.md --title "The agent team and how it communicates"
+```
+
 `python tools/load_report.py --markdown 'logs/*.jsonl'` produces the
 call-distribution table for the report, and exits non-zero if any agent is over
 the limit.
