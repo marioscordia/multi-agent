@@ -258,7 +258,7 @@ src/safeschool/
   llm.py          Anthropic + mock fallback     pipeline.py   one entry point
   config.py       settings and secrets          scenarios.py  tests with expectations
   agents/         one module per agent          tools/        the seven tools
-docs/             architecture (EN + RU), rubric map
+docs/             architecture (EN + RU), agent communication report, rubric map
 fixtures/         recorded scenarios + synthetic keyframes
 scripts/          fetch_samples.py, make_fixtures.py
 tools/            load_report.py
