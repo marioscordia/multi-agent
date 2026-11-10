@@ -166,7 +166,7 @@ def agents() -> None:
     llm = LLMClient(settings)
     specs = [OrchestratorAgent(llm).spec()]
     for cls in WORKER_AGENTS:
-        agent = cls(llm) if cls.__name__ in {"ContextAgent", "VerifierAgent"} else cls()
+        agent = cls(llm) if cls.__name__ in {"ContextAgent", "VerifierAgent", "PrivacyReportAgent"} else cls()
         specs.append(agent.spec())
 
     _banner("Agent specification")

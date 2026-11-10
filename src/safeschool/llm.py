@@ -1,7 +1,9 @@
 """LLM access.
 
-Only two agents reason in natural language (ContextAgent and VerifierAgent), and
-both of them need strict JSON back. This module gives them one entry point that
+Three agents use the language model, each for a different job: ContextAgent
+classifies the incident, VerifierAgent audits that classification, and
+PrivacyReportAgent writes the plain-language message for staff. All three need
+strict JSON back. This module gives them one entry point that
 
 * reads the key from the environment (never from source);
 * constrains the answer to a JSON schema (structured outputs), so a reply that

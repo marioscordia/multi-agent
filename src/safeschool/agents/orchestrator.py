@@ -92,7 +92,7 @@ class OrchestratorAgent(Agent):
             "motion": MotionAnalystAgent(),
             "context": ContextAgent(llm),
             "verify": VerifierAgent(llm),
-            "report": PrivacyReportAgent(),
+            "report": PrivacyReportAgent(llm),
         }
 
     # -- planning (the orchestrator's only actual output) ----------------- #

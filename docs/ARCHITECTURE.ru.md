@@ -69,7 +69,7 @@ CaseRequest
 | 3 | `MotionAnalystAgent` | Связывает детекции в треки, считает признаки движения и оценку | `DetectionSet` | `MotionAssessment` | `tracking.assign_ids`, `features.extract_features`, `features.score` | у каждого клипа оценка в [0,1] и вектор признаков |
 | 4 | `ContextAgent` | Интерпретирует по школьной политике и обзорной литературе | `MotionAssessment` | `ContextVerdict` | `policy_kb.candidate_clauses`, `corpus_retriever.search`, `evidence.summarize`, `llm.complete_json` | есть категория, уровень 1–4 и ≥1 ссылка на источник |
 | 5 | `VerifierAgent` | Независимо проверяет цепочку: принять / отклонить / повторить | `ContextVerdict` | `Verification` | `rules.consistency_checks`, `llm.complete_json`, `case_store.read_artifacts`, `evidence.summarize` | вынесен вердикт с уверенностью и списком замечаний |
-| 6 | `PrivacyReportAgent` | Скрывает лица, формирует отчёт, эскалирует по политике | `Verification` | `IncidentReport` | `blur.redact_frame`, `policy_kb.escalation_tier`, `report.render`, `notifier.notify` | отчёты созданы и ссылаются только на обезличенные кадры |
+| 6 | `PrivacyReportAgent` | Скрывает лица, формирует отчёт, эскалирует по политике | `Verification` | `IncidentReport` | `blur.redact_frame`, `policy_kb.escalation_tier`, `llm.complete_json`, `report.render`, `notifier.notify` | отчёты созданы и ссылаются только на обезличенные кадры |
 
 Роли не дублируются: у каждого агента свой этап, проверяется тестом
 `test_agent_team_meets_the_specification`.
@@ -99,7 +99,7 @@ class AgentMessage(BaseModel):
 
 ## 5. Внешние инструменты и источники данных (требуется ≥2, реализовано 5)
 
-1. **Anthropic Claude API** — рассуждение в агентах 4 и 5
+1. **Anthropic Claude API** — рассуждение в агентах 4 и 5 и понятное сотрудникам резюме в агенте 6
 2. **Предобученные веса YOLOv8n / YOLOv8n-pose** — детекция и оценка поз
 3. **Корпус литературы диссертации** — 50 рассмотренных статей
    (`matrix_literature.csv` и извлечённые полные тексты), индекс BM25
@@ -112,15 +112,15 @@ class AgentMessage(BaseModel):
 
 | агент | вызовы инструментов | вызовы LLM | доля |
 |---|---:|---:|---:|
-| `MotionAnalystAgent` | 61 | 0 | 24.0% |
-| `VisionDetectorAgent` | 52 | 0 | 20.5% |
-| `PrivacyReportAgent` | 39 | 0 | 15.4% |
-| `IngestAgent` | 38 | 0 | 15.0% |
-| `ContextAgent` | 24 | 8 | 12.6% |
-| `VerifierAgent` | 24 | 8 | 12.6% |
+| `MotionAnalystAgent` | 61 | 0 | 23.3% |
+| `VisionDetectorAgent` | 52 | 0 | 19.8% |
+| `PrivacyReportAgent` | 39 | 8 | 17.9% |
+| `IngestAgent` | 38 | 0 | 14.5% |
+| `ContextAgent` | 24 | 8 | 12.2% |
+| `VerifierAgent` | 24 | 8 | 12.2% |
 | `OrchestratorAgent` | 0 | 0 | 0.0% |
 
-Максимум — 24.0% из 254 вызовов при лимите 40%. У оркестратора 0%, поскольку он только планирует
+Максимум — 23.3% из 262 вызовов при лимите 40%. У оркестратора 0%, поскольку он только планирует
 и маршрутизирует, что и требуется техзаданием; лог это подтверждает.
 
 ## 7. Надёжность и безопасность
@@ -158,7 +158,7 @@ class AgentMessage(BaseModel):
 Первые четыре сценария — наиболее важные: это реальное видео, где правильное
 поведение системы — молчание. Система, не умеющая молчать, в школе неприменима.
 
-Дополнительно: 46 модульных теста (`pytest`).
+Дополнительно: 50 модульных тестов (`pytest`).
 
 ## 9. Связь с результатами обзора литературы (этап 1)
 

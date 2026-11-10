@@ -132,7 +132,7 @@ def test_agent_team_meets_the_specification(settings):
     """4+ agents required, 5+ for full marks; <=5 tools each; distinct roles."""
     llm = LLMClient(settings)
     agents = [OrchestratorAgent(llm)] + [
-        cls(llm) if cls.__name__ in {"ContextAgent", "VerifierAgent"} else cls()
+        cls(llm) if cls.__name__ in {"ContextAgent", "VerifierAgent", "PrivacyReportAgent"} else cls()
         for cls in WORKER_AGENTS
     ]
     assert len(agents) >= 5

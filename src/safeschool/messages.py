@@ -297,6 +297,10 @@ class IncidentReport(Payload):
     severity: int
     confidence: float
     summary: str
+    #: what the person receiving the alert should do, in one sentence
+    staff_action: str = ""
+    #: who wrote the summary: the language model, or the fixed template fallback
+    summary_source: Literal["llm", "template"] = "template"
     redacted_keyframes: list[str] = Field(default_factory=list)
     faces_redacted: int = 0
     report_markdown_path: str | None = None

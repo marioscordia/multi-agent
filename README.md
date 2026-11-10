@@ -92,7 +92,7 @@ flowchart TB
 | 3 | `MotionAnalystAgent` | Associate detections into tracks, compute features and a violence score | `DetectionSet` | `MotionAssessment` | `tracking.assign_ids`, `features.extract_features`, `features.score` | every clip has a score in [0,1] and its feature vector |
 | 4 | `ContextAgent` | Interpret against school policy and the reviewed literature | `MotionAssessment` | `ContextVerdict` | `policy_kb.candidate_clauses`, `corpus_retriever.search`, `evidence.summarize`, `llm.complete_json` | a category, severity 1–4 and ≥1 citation |
 | 5 | `VerifierAgent` | Independently audit the chain; accept / reject / re-run | `ContextVerdict` | `Verification` | `rules.consistency_checks`, `llm.complete_json`, `case_store.read_artifacts`, `evidence.summarize` | a verdict with confidence and an issue list |
-| 6 | `PrivacyReportAgent` | Redact faces, write the report, escalate per policy | `Verification` | `IncidentReport` | `blur.redact_frame`, `policy_kb.escalation_tier`, `report.render`, `notifier.notify` | reports exist and reference only redacted frames |
+| 6 | `PrivacyReportAgent` | Redact faces, write the report, escalate per policy | `Verification` | `IncidentReport` | `blur.redact_frame`, `policy_kb.escalation_tier`, `llm.complete_json`, `report.render`, `notifier.notify` | reports exist and reference only redacted frames |
 
 Messages are pydantic models with `extra="forbid"`, serialized to JSON inside an
 `AgentMessage` envelope. A typo'd field fails at the receiving boundary rather
@@ -101,7 +101,7 @@ rides on the envelope, never inside a domain payload.
 
 ### External tools and data sources
 
-1. **Anthropic Claude API** — the reasoning in agents 4 and 5
+1. **Anthropic Claude API** — the reasoning in agents 4 and 5, and the plain-language staff summary in agent 6
 2. **Pretrained YOLOv8n / YOLOv8n-pose** — detection and pose estimation
 3. **The thesis literature corpus** — 50 reviewed papers (`matrix_literature.csv` plus the extracted full texts), indexed with BM25 so verdicts cite published evidence
 4. **School-safety policy knowledge base** — `data/policy/school_safety_policy.json`
@@ -192,15 +192,15 @@ Measured from the logs of all 10 scenarios (`tools/load_report.py`):
 
 | agent | tool calls | LLM calls | share |
 |---|---:|---:|---:|
-| `MotionAnalystAgent` | 61 | 0 | 24.0% |
-| `VisionDetectorAgent` | 52 | 0 | 20.5% |
-| `PrivacyReportAgent` | 39 | 0 | 15.4% |
-| `IngestAgent` | 38 | 0 | 15.0% |
-| `ContextAgent` | 24 | 8 | 12.6% |
-| `VerifierAgent` | 24 | 8 | 12.6% |
+| `MotionAnalystAgent` | 61 | 0 | 23.3% |
+| `VisionDetectorAgent` | 52 | 0 | 19.8% |
+| `PrivacyReportAgent` | 39 | 8 | 17.9% |
+| `IngestAgent` | 38 | 0 | 14.5% |
+| `ContextAgent` | 24 | 8 | 12.2% |
+| `VerifierAgent` | 24 | 8 | 12.2% |
 | `OrchestratorAgent` | 0 | 0 | 0.0% |
 
-Busiest agent 24.0% of 254 calls, against a 40% limit. The orchestrator sits at 0% because it
+Busiest agent 23.3% of 262 calls, against a 40% limit. The orchestrator sits at 0% because it
 plans and routes and does nothing else — which is what the specification asks of
 it, and the log is what proves it.
 
@@ -227,7 +227,7 @@ The first four are the ones that matter most: they are real footage where the
 correct behaviour is silence. A system that cannot stay quiet is not deployable
 in a school.
 
-`pytest` — 46 tests covering the message contract, budgets, loop protection,
+`pytest` — 50 tests covering the message contract, budgets, loop protection,
 retries, the re-run path, secret redaction, the Anthropic path (stubbed), and the
 load limit.
 
@@ -268,7 +268,7 @@ docs/             architecture (EN + RU), agent communication report, rubric map
 fixtures/         recorded scenarios + synthetic keyframes
 scripts/          fetch_samples.py, make_fixtures.py
 tools/            load_report.py
-tests/            46 tests
+tests/            50 tests
 ```
 
 ## Licence and intent

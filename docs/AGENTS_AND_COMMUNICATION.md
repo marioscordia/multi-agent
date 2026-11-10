@@ -20,11 +20,15 @@ no two share a role.
 | 3 | `MotionAnalystAgent` | temporal association and scoring | no |
 | 4 | `ContextAgent` | interpretation against policy and literature | **yes** |
 | 5 | `VerifierAgent` | independent audit | **yes** |
-| 6 | `PrivacyReportAgent` | redaction, reporting, escalation | no |
+| 6 | `PrivacyReportAgent` | redaction, reporting, escalation | **yes** — writes the staff summary only |
 
-Only two agents use the language model. The other five do deterministic or
-numeric work, where an LLM would add cost, latency and non-reproducibility
-without adding capability. This is a deliberate division: **language is used
+Three agents use the language model, each for a different language task:
+ContextAgent classifies, VerifierAgent audits, and PrivacyReportAgent turns the
+technical verdict into a short message a teacher can act on. The report agent's
+model only writes text: the alert level is fixed by policy before it is called,
+and it never sees a frame. The other four do deterministic or numeric work,
+where an LLM would add cost, latency and non-reproducibility without adding
+capability. This is a deliberate division: **language is used
 where judgement is needed, not as the default mechanism for everything.**
 
 ---
@@ -169,16 +173,16 @@ it, never beneath it.
 
 ## 7. Measured communication load
 
-Across all ten scenarios (`tools/load_report.py`, 254 tool and LLM calls):
+Across all ten scenarios (`tools/load_report.py`, 262 tool and LLM calls):
 
 | agent | tool calls | LLM calls | share |
 |---|---:|---:|---:|
-| `MotionAnalystAgent` | 61 | 0 | 24.0% |
-| `VisionDetectorAgent` | 52 | 0 | 20.5% |
-| `PrivacyReportAgent` | 39 | 0 | 15.4% |
-| `IngestAgent` | 38 | 0 | 15.0% |
-| `ContextAgent` | 24 | 8 | 12.6% |
-| `VerifierAgent` | 24 | 8 | 12.6% |
+| `MotionAnalystAgent` | 61 | 0 | 23.3% |
+| `VisionDetectorAgent` | 52 | 0 | 19.8% |
+| `PrivacyReportAgent` | 39 | 8 | 17.9% |
+| `IngestAgent` | 38 | 0 | 14.5% |
+| `ContextAgent` | 24 | 8 | 12.2% |
+| `VerifierAgent` | 24 | 8 | 12.2% |
 | `OrchestratorAgent` | 0 | 0 | 0.0% |
 
 Two observations worth defending:
@@ -187,7 +191,7 @@ Two observations worth defending:
 else, which the specification requires of it. The log is what proves this rather
 than the claim — `test_orchestrator_does_no_domain_work` asserts it on every run.
 
-**The busiest agent holds 24.0%, against a 40% limit.** This was not free. An
+**The busiest agent holds 23.3%, against a 40% limit.** This was not free. An
 early version ran YOLO inference once per frame, which put the
 VisionDetectorAgent at **77.2%** of all calls. Batching inference per clip —
 faster in itself — brought it to 32.6%. Moving identity association from the
@@ -241,4 +245,4 @@ the notes for any case the system has ever handled.
 | Loop safety | one re-run maximum, then a decision; identical input twice aborts |
 | Shared state | `CaseFile` blackboard, persisted to SQLite |
 | Auditability | every call logged by the runtime, secrets scrubbed |
-| Load balance | 24.0% maximum, 0% for the orchestrator |
+| Load balance | 23.3% maximum, 0% for the orchestrator |
