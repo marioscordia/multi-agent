@@ -137,6 +137,11 @@ def _set_page_geometry(doc) -> int:
     return usable // 635          # EMU -> twips
 
 
+#: rough width of one character of table text, and the cell's side padding (twips)
+_TWIPS_PER_CHAR = 105
+_CELL_PADDING = 240
+
+
 def _fit_table(table, total_width: int) -> None:
     """Make the table span the text column, with columns sized to their content.
 
@@ -162,6 +167,30 @@ def _fit_table(table, total_width: int) -> None:
     total_weight = sum(weights) or 1.0
     min_width = int(total_width * 0.055)
     widths = [max(min_width, int(total_width * w / total_weight)) for w in weights]
+
+    # never let a column be narrower than its longest single word, or Word breaks
+    # the word mid-way ("Orchest-rator"); the wide columns give up the difference
+    floors = []
+    for c in range(columns):
+        longest_word = 1
+        for row in table.rows:
+            try:
+                words = row.cells[c].text.split()
+            except IndexError:
+                continue
+            longest_word = max([longest_word] + [len(w) for w in words])
+        # a very long token (a dotted code name) may wrap; it must not claim the
+        # width that keeps ordinary words in the other columns whole
+        floors.append(min(longest_word * _TWIPS_PER_CHAR + _CELL_PADDING,
+                          int(total_width * 0.2)))
+    if sum(floors) <= total_width:
+        pinned = [max(w, f) for w, f in zip(widths, floors)]
+        excess = sum(pinned) - total_width
+        if excess > 0:
+            slack = [p - f for p, f in zip(pinned, floors)]
+            total_slack = sum(slack) or 1
+            pinned = [p - int(excess * s / total_slack) for p, s in zip(pinned, slack)]
+        widths = pinned
     # correct rounding drift so the columns sum to exactly the text width
     widths[-1] += total_width - sum(widths)
 
