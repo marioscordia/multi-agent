@@ -90,8 +90,8 @@ flowchart TB
 | 1 | `IngestAgent` | Decode the video, segment into clips, extract keyframes | video path | `ClipSet` | `video.probe`, `video.extract_keyframes`, `fixtures.load` | ≥1 clip with a valid interval is registered |
 | 2 | `VisionDetectorAgent` | Per-frame persons, 17-point poses, weapon-like objects | `ClipSet` | `DetectionSet` | `yolo.load_model`, `yolo.detect_poses`, `yolo.detect_objects`, `fixtures.load` | every clip has a detection record (empty is valid) |
 | 3 | `MotionAnalystAgent` | Associate detections into tracks, compute features and a violence score | `DetectionSet` | `MotionAssessment` | `tracking.assign_ids`, `features.extract_features`, `features.score` | every clip has a score in [0,1] and its feature vector |
-| 4 | `ContextAgent` | Interpret against school policy and the reviewed literature | `MotionAssessment` | `ContextVerdict` | `policy_kb.candidate_clauses`, `corpus_retriever.search`, `llm.complete_json` | a category, severity 1–4 and ≥1 citation |
-| 5 | `VerifierAgent` | Independently audit the chain; accept / reject / re-run | `ContextVerdict` | `Verification` | `rules.consistency_checks`, `llm.complete_json`, `case_store.read_artifacts` | a verdict with confidence and an issue list |
+| 4 | `ContextAgent` | Interpret against school policy and the reviewed literature | `MotionAssessment` | `ContextVerdict` | `policy_kb.candidate_clauses`, `corpus_retriever.search`, `evidence.summarize`, `llm.complete_json` | a category, severity 1–4 and ≥1 citation |
+| 5 | `VerifierAgent` | Independently audit the chain; accept / reject / re-run | `ContextVerdict` | `Verification` | `rules.consistency_checks`, `llm.complete_json`, `case_store.read_artifacts`, `evidence.summarize` | a verdict with confidence and an issue list |
 | 6 | `PrivacyReportAgent` | Redact faces, write the report, escalate per policy | `Verification` | `IncidentReport` | `blur.redact_frame`, `policy_kb.escalation_tier`, `report.render`, `notifier.notify` | reports exist and reference only redacted frames |
 
 Messages are pydantic models with `extra="forbid"`, serialized to JSON inside an
@@ -192,15 +192,15 @@ Measured from the logs of all 10 scenarios (`tools/load_report.py`):
 
 | agent | tool calls | LLM calls | share |
 |---|---:|---:|---:|
-| `MotionAnalystAgent` | 61 | 0 | 25.5% |
-| `VisionDetectorAgent` | 52 | 0 | 21.8% |
-| `PrivacyReportAgent` | 40 | 0 | 16.7% |
-| `IngestAgent` | 38 | 0 | 15.9% |
-| `ContextAgent` | 16 | 8 | 10.0% |
-| `VerifierAgent` | 16 | 8 | 10.0% |
+| `MotionAnalystAgent` | 61 | 0 | 24.0% |
+| `VisionDetectorAgent` | 52 | 0 | 20.5% |
+| `PrivacyReportAgent` | 39 | 0 | 15.4% |
+| `IngestAgent` | 38 | 0 | 15.0% |
+| `ContextAgent` | 24 | 8 | 12.6% |
+| `VerifierAgent` | 24 | 8 | 12.6% |
 | `OrchestratorAgent` | 0 | 0 | 0.0% |
 
-Busiest agent 25.5% of 239 calls, against a 40% limit. The orchestrator sits at 0% because it
+Busiest agent 24.0% of 254 calls, against a 40% limit. The orchestrator sits at 0% because it
 plans and routes and does nothing else — which is what the specification asks of
 it, and the log is what proves it.
 
@@ -227,7 +227,7 @@ The first four are the ones that matter most: they are real footage where the
 correct behaviour is silence. A system that cannot stay quiet is not deployable
 in a school.
 
-`pytest` — 43 tests covering the message contract, budgets, loop protection,
+`pytest` — 46 tests covering the message contract, budgets, loop protection,
 retries, the re-run path, secret redaction, the Anthropic path (stubbed), and the
 load limit.
 
@@ -268,7 +268,7 @@ docs/             architecture (EN + RU), agent communication report, rubric map
 fixtures/         recorded scenarios + synthetic keyframes
 scripts/          fetch_samples.py, make_fixtures.py
 tools/            load_report.py
-tests/            43 tests
+tests/            46 tests
 ```
 
 ## Licence and intent

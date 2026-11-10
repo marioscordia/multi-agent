@@ -30,15 +30,20 @@ from ..messages import (
     MotionAssessment,
 )
 from ..runtime import Agent, Context, SafeSchoolError
-from ..tools import corpus_retriever, policy_kb
+from ..tools import corpus_retriever, evidence, policy_kb
 
 _SYSTEM = (
     "You are a child-safeguarding analyst for an automated school video "
     "monitoring system. You classify an incident using ONLY the policy clauses "
-    "you are given and the motion features measured by the vision pipeline. "
-    "You never see images. You are conservative: when the evidence is weak or "
-    "ambiguous, prefer the benign category, because a false alarm in a school "
-    "erodes staff trust and desensitizes responders."
+    "you are given and the measurements from the vision pipeline. You never see "
+    "images. Weigh both kinds of error: a false alarm erodes staff trust, but a "
+    "missed weapon or a missed assault on a child can cause serious harm. When "
+    "the motion evidence is genuinely ambiguous, prefer the benign category. Do "
+    "not dismiss strong, specific evidence - a weapon held in a hand across "
+    "several frames, one person repeatedly striking another, or a much larger "
+    "person grabbing and moving a smaller one - only because the scene context "
+    "is unknown: classify it under the matching clause and state how sure you "
+    "are. A human reviews every alert before anyone acts on it."
 )
 
 #: Maximum difference in bounding-box bottom edge (normalized) for two people to
@@ -63,8 +68,27 @@ _SCHEMA = """{
   "severity": <integer 1-4>,
   "is_child_context": <true|false>,
   "policy_refs": ["<clause id>"],
-  "reasoning": "<2-3 sentences citing the specific feature values>"
+  "reasoning": "<3-4 sentences citing the specific feature values>"
 }"""
+
+#: longest reasoning kept in the verdict; the prompt asks for far less
+MAX_REASONING_CHARS = 2000
+
+
+def _json_schema(candidates: list[dict]) -> dict:
+    """Strict output schema: the category can only be one of the candidates."""
+    return {
+        "type": "object",
+        "properties": {
+            "category": {"type": "string", "enum": [c["category"] for c in candidates]},
+            "severity": {"type": "integer", "enum": [1, 2, 3, 4]},
+            "is_child_context": {"type": "boolean"},
+            "policy_refs": {"type": "array", "items": {"type": "string"}},
+            "reasoning": {"type": "string"},
+        },
+        "required": ["category", "severity", "is_child_context", "policy_refs", "reasoning"],
+        "additionalProperties": False,
+    }
 
 
 class ContextAgent(Agent):
@@ -74,6 +98,7 @@ class ContextAgent(Agent):
     tools = (
         "policy_kb.candidate_clauses",
         "corpus_retriever.search",
+        "evidence.summarize",
         "llm.complete_json",
     )
     done_criterion = "a verdict with a policy category, severity 1-4 and at least one citation"
@@ -122,6 +147,12 @@ class ContextAgent(Agent):
             for hit in hits
         ]
 
+        clip_set = ctx.case.get("ingest")
+        summary = ctx.tool(
+            self.name, "evidence.summarize", evidence.summarize, clip_detections,
+            fps=getattr(clip_set, "fps", 15.0) or 15.0,
+        )
+
         features = top.features.model_dump()
         prompt = self._build_prompt(
             top=top,
@@ -131,6 +162,7 @@ class ContextAgent(Agent):
             person_count=person_count,
             scale_disparity=scale_disparity,
             hits=hits,
+            summary=summary,
         )
         fallback = self._heuristic_verdict(
             candidates, top.violence_score, weapon_present, scale_disparity,
@@ -139,7 +171,8 @@ class ContextAgent(Agent):
 
         result = self.llm.complete_json(
             agent=self.name, ctx=ctx, system=_SYSTEM, prompt=prompt,
-            schema_hint=_SCHEMA, mock=fallback, purpose="classify",
+            schema_hint=_SCHEMA, json_schema=_json_schema(candidates),
+            mock=fallback, purpose="classify",
         )
 
         valid_categories = {c["category"] for c in candidates}
@@ -168,9 +201,9 @@ class ContextAgent(Agent):
             severity=severity,
             is_child_context=bool(result.get("is_child_context", True)),
             policy_refs=[str(r) for r in policy_refs][:4],
-            reasoning=str(result.get("reasoning", fallback["reasoning"]))[:1200],
+            reasoning=str(result.get("reasoning", fallback["reasoning"]))[:MAX_REASONING_CHARS],
             citations=citations,
-            llm_used=self.llm.provider != "mock",
+            llm_used=self.llm.provider != "mock" and not result.get("_llm_fallback"),
         )
 
     # -- helpers --------------------------------------------------------- #
@@ -245,7 +278,7 @@ class ContextAgent(Agent):
 
     @staticmethod
     def _build_prompt(*, top, features, candidates, weapon_present, person_count,
-                      scale_disparity, hits) -> str:
+                      scale_disparity, hits, summary=None) -> str:
         feature_lines = "\n".join(f"  - {k}: {v:.3f}" for k, v in features.items())
         candidate_lines = "\n".join(
             f"  - {c['category']} (clause {c['id']}, severity {c['severity']}): "
@@ -260,12 +293,17 @@ class ContextAgent(Agent):
 MEASURED MOTION FEATURES (normalized 0-1 unless noted):
 {feature_lines}
 
+{evidence.FEATURE_GUIDE}
+
 PIPELINE SUMMARY:
   - violence score: {top.violence_score:.3f}
   - scorer rationale: {top.rationale}
   - max persons in frame: {person_count}
   - weapon-like object detected: {weapon_present}
-  - person body-scale disparity (max/min bbox height): {scale_disparity}
+  - body-scale disparity of the closest interacting pair at equal depth
+    (taller/shorter bbox height; ~1.0 = similar size, >=1.45 = adult-child range): {scale_disparity}
+
+{evidence.describe(summary) if summary else ''}
 
 CANDIDATE POLICY CLAUSES (choose exactly one category from this list):
 {candidate_lines}
@@ -273,8 +311,8 @@ CANDIDATE POLICY CLAUSES (choose exactly one category from this list):
 RELEVANT PUBLISHED EVIDENCE (from the project's literature review):
 {evidence_lines}
 
-Classify the incident. Justify your choice from the feature values above, and
-state explicitly if the evidence is too weak to support an alert."""
+Classify the incident. Justify your choice from the values above in 3-4
+sentences, and state explicitly if the evidence is too weak to support an alert."""
 
     @staticmethod
     def _heuristic_verdict(candidates, score: float, weapon_present: bool,

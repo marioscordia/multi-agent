@@ -23,27 +23,32 @@ class _Usage:
 
 
 class _Response:
-    def __init__(self, text):
+    def __init__(self, text, stop_reason="end_turn"):
         self.content, self.usage = [_Block(text)], _Usage()
+        self.stop_reason, self.stop_details = stop_reason, None
 
 
 class StubMessages:
-    """Replays scripted responses; a string is returned, an Exception is raised."""
+    """Replays scripted responses: a string is returned, an Exception is raised,
+    a _Response is returned as-is."""
 
     def __init__(self, script):
-        self.script, self.calls = list(script), 0
+        self.script, self.calls, self.last_kwargs = list(script), 0, {}
 
     def create(self, **kwargs):
         self.calls += 1
+        self.last_kwargs = kwargs
         item = self.script.pop(0)
         if isinstance(item, Exception):
             raise item
-        return _Response(item)
+        return item if isinstance(item, _Response) else _Response(item)
 
 
 class StubAnthropic:
     def __init__(self, script):
         self.messages = StubMessages(script)
+        # the refusal-fallback path goes through client.beta.messages
+        self.beta = type("Beta", (), {"messages": self.messages})()
 
 
 def make_ctx(settings, logger):
@@ -113,6 +118,48 @@ def test_persistent_api_failure_raises_after_max_attempts(settings, logger):
             agent="VerifierAgent", ctx=ctx, system="s", prompt="p",
             schema_hint="{}", mock={}, purpose="verify",
         )
+
+
+def test_json_schema_is_sent_as_structured_output(settings, logger):
+    client = live_client(settings, ['{"verdict": "accept"}'])
+    ctx = make_ctx(settings, logger)
+    schema = {"type": "object", "properties": {"verdict": {"type": "string"}},
+              "required": ["verdict"], "additionalProperties": False}
+    client.complete_json(
+        agent="VerifierAgent", ctx=ctx, system="s", prompt="p",
+        schema_hint="{}", json_schema=schema, mock={}, purpose="verify",
+    )
+    sent = client._client.messages.last_kwargs
+    assert sent["output_config"]["format"] == {"type": "json_schema", "schema": schema}
+
+
+def test_cut_off_answer_is_retried(settings, logger):
+    client = live_client(settings, [
+        _Response('{"verdict": "acc', stop_reason="max_tokens"),
+        '{"verdict": "accept"}',
+    ])
+    ctx = make_ctx(settings, logger)
+    result = client.complete_json(
+        agent="VerifierAgent", ctx=ctx, system="s", prompt="p",
+        schema_hint="{}", mock={}, purpose="verify",
+    )
+    assert result == {"verdict": "accept"}
+    assert client._client.messages.calls == 2
+
+
+def test_refusal_falls_back_to_the_heuristic_visibly(settings, logger):
+    client = live_client(settings, [_Response("", stop_reason="refusal")])
+    ctx = make_ctx(settings, logger)
+    result = client.complete_json(
+        agent="ContextAgent", ctx=ctx, system="s", prompt="p",
+        schema_hint="{}", mock={"category": "physical_violence"}, purpose="classify",
+    )
+    assert result["category"] == "physical_violence"
+    assert result["_llm_fallback"] == "refusal"
+    assert client._client.messages.calls == 1          # a refusal is not retried
+    record = [r for r in logger.records if r["event"] == "llm"][0]
+    assert record["ok"] is False and "refusal" in record["detail"]
+    assert any("declined" in n for n in ctx.case.notes)
 
 
 def test_mock_mode_needs_no_key_and_is_labelled(settings, logger):

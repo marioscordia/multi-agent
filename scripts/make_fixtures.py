@@ -105,64 +105,95 @@ def person(frame_index: int, t: float, track_id: int, cx: float, cy: float,
     }
 
 
-def weapon(frame_index: int, t: float, cx: float, cy: float) -> dict:
+def weapon(frame_index: int, t: float, cx: float, cy: float, confidence: float) -> dict:
     return {
         "frame_index": frame_index,
         "t": round(t, 3),
         "cls": "knife",
-        "confidence": 0.61,
+        "confidence": round(confidence, 2),
         "bbox": (round(cx - 0.02, 4), round(cy - 0.015, 4), round(cx + 0.02, 4), round(cy + 0.015, 4)),
         "track_id": None,
         "keypoints": [],
     }
 
 
+def lead_wrist(det: dict, facing: float) -> tuple[float, float]:
+    """Where the leading (striking) hand of a generated skeleton is."""
+    index = KP_NAMES.index("right_wrist" if facing > 0 else "left_wrist")
+    x, y, _ = det["keypoints"][index]
+    return x, y
+
+
 # --------------------------------------------------------------------------- #
 # scenario builders
+#
+# Speeds are calibrated against the real CCTV clips: people walking a corridor
+# measure mean_speed ~0.20 and peak_speed ~0.35. A fight must be clearly faster
+# and more erratic than that, or a careful reviewer will rightly call it play.
 # --------------------------------------------------------------------------- #
 
+# per-step offsets (one step = STRIDE frames = 0.2 s): sudden lunges and recoils
+_LUNGE = (0.00, 0.07, 0.01, 0.08, -0.01, 0.07, 0.02, 0.09, 0.00, 0.07)
+_STRIKE = (0.3, 1.0, 0.4, 1.0, 0.3, 1.0, 0.5, 1.0, 0.3, 1.0)
+
+
 def build_fight(*, frames: int = 10) -> list[dict]:
-    """Two peers, close together, high reciprocal reach, rapid oscillation."""
+    """A one-sided altercation: person 1 lunges and strikes repeatedly, person 2
+    is knocked back and ducks. Fast, jerky, asymmetric — not mutual play."""
     out: list[dict] = []
     for i in range(frames):
         fi = i * STRIDE
         t = fi / FPS
-        phase = math.sin(i * 1.5)
-        reach_a = max(0.0, phase)
-        reach_b = max(0.0, -phase)
-        cx_a = 0.455 + 0.016 * phase
-        cx_b = 0.545 - 0.016 * phase
-        out.append(person(fi, t, 1, cx_a, 0.56, 0.44, reach_a, +1.0))
-        out.append(person(fi, t, 2, cx_b, 0.56, 0.43, reach_b, -1.0))
+        cx_a = 0.40 + _LUNGE[i]
+        cy_a = 0.56 + (-0.03 if _STRIKE[i] > 0.9 else 0.02)
+        # the target is pushed back on each blow and stumbles forward between them
+        cx_b = cx_a + 0.08 + (0.04 if _STRIKE[i] > 0.9 else -0.01)
+        cy_b = 0.57 + (0.04 if _STRIKE[i] > 0.9 else -0.01)
+        out.append(person(fi, t, 1, cx_a, cy_a, 0.44, _STRIKE[i], +1.0))
+        out.append(person(fi, t, 2, cx_b, cy_b, 0.43, 0.15, -1.0))
     return out
 
 
 def build_weapon(*, frames: int = 10) -> list[dict]:
-    """A fight, plus a weapon-like object detected in the leading hand."""
-    out = build_fight(frames=frames)
-    for i in range(frames):
-        fi = i * STRIDE
-        if i % 2 == 0:
-            out.append(weapon(fi, fi / FPS, 0.51, 0.47))
-    return out
-
-
-def build_adult_child(*, frames: int = 10) -> list[dict]:
-    """One large and one small body in contact: the safeguarding case.
-
-    The scale ratio (0.60 / 0.33 = 1.8) is what distinguishes clause SSP-2.1
-    from a peer altercation, and the child's horizontal motion opposes its own
-    facing direction — being moved rather than moving.
-    """
+    """Person 1 advances with a knife held in the leading hand and thrusts it at
+    person 2, who backs away. The knife is detected in the hand on every frame."""
     out: list[dict] = []
     for i in range(frames):
         fi = i * STRIDE
         t = fi / FPS
-        reach = 0.55 + 0.3 * max(0.0, math.sin(i * 1.2))
-        adult_x = 0.46 + 0.004 * i
-        child_x = 0.555 + 0.010 * i      # dragged along
+        thrust = _STRIKE[i]
+        cx_a = 0.30 + 0.035 * i + (0.06 if thrust > 0.9 else -0.02)
+        cy_a = 0.56 + (-0.03 if thrust > 0.9 else 0.02)
+        cx_b = 0.30 + 0.035 * i + 0.16 + (0.06 if thrust > 0.9 else 0.0)
+        cy_b = 0.57 + (0.04 if thrust > 0.9 else -0.01)
+        attacker = person(fi, t, 1, cx_a, cy_a, 0.44, thrust, +1.0)
+        out.append(attacker)
+        out.append(person(fi, t, 2, cx_b, cy_b, 0.43, 0.2, -1.0))
+        wx, wy = lead_wrist(attacker, +1.0)
+        out.append(weapon(fi, t, wx, wy, 0.78 + 0.06 * math.sin(i)))
+    return out
+
+
+def build_adult_child(*, frames: int = 10) -> list[dict]:
+    """An adult grabs a child by the arm and drags them across the frame.
+
+    The scale ratio (0.60 / 0.33 = 1.8) is what distinguishes clause SSP-2.1
+    from a peer altercation. The child faces away (+1, trying to pull free) but
+    is yanked the other way in jerks — being moved rather than moving.
+    """
+    yank = (0.00, 0.10, -0.02, 0.11, -0.03, 0.10, -0.01, 0.12, -0.02, 0.10)
+    out: list[dict] = []
+    adult_x = 0.62
+    child_x = 0.71
+    for i in range(frames):
+        fi = i * STRIDE
+        t = fi / FPS
+        adult_x -= 0.03                       # the adult walks off to the left
+        child_x = adult_x + 0.09 - 0.5 * yank[i] + (0.04 if yank[i] < 0 else 0.0)
+        child_y = 0.62 + (-0.015 if yank[i] > 0.05 else 0.01)
+        reach = 0.95 if yank[i] > 0.05 else 0.7
         out.append(person(fi, t, 1, adult_x, 0.52, 0.60, reach, +1.0))
-        out.append(person(fi, t, 2, child_x, 0.62, 0.33, 0.1, -1.0))
+        out.append(person(fi, t, 2, child_x, child_y, 0.33, 0.6, +1.0))
     return out
 
 

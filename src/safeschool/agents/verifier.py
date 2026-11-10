@@ -24,13 +24,42 @@ from ..messages import (
     Verification,
 )
 from ..runtime import Agent, Context, SafeSchoolError
+from ..tools import evidence
 
 _SYSTEM = (
     "You are an independent verification analyst auditing an automated school "
-    "safety alert before it reaches a human. Your job is to find reasons the "
-    "alert might be wrong, not to agree with it. A false alarm in a school is "
-    "costly: it desensitizes staff. Judge only the evidence presented."
+    "safety decision before it reaches a human. Your job is to find reasons the "
+    "decision might be wrong, not to agree with it - in either direction. An "
+    "alert can be a false alarm, which desensitizes staff; a dismissal can be a "
+    "missed incident, which can leave a child hurt. Judge only the evidence "
+    "presented. An issue marked fixture_backed_run is informational: judge the "
+    "evidence as if it came from a live camera."
 )
+
+_VERIFY_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "verdict": {"type": "string", "enum": ["accept", "reject", "rerun"]},
+        "confidence": {"type": "number"},
+        "false_positive_risk": {"type": "string", "enum": ["low", "medium", "high"]},
+        "issues": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "properties": {
+                    "code": {"type": "string"},
+                    "detail": {"type": "string"},
+                    "severity": {"type": "string", "enum": ["info", "warning", "blocking"]},
+                },
+                "required": ["code", "detail", "severity"],
+                "additionalProperties": False,
+            },
+        },
+        "reasoning": {"type": "string"},
+    },
+    "required": ["verdict", "confidence", "false_positive_risk", "issues", "reasoning"],
+    "additionalProperties": False,
+}
 
 _SCHEMA = """{
   "verdict": "accept" | "reject" | "rerun",
@@ -45,7 +74,12 @@ class VerifierAgent(Agent):
     name = "VerifierAgent"
     stage = "verify"
     role = "Independently audit the detection chain for consistency and false-positive risk"
-    tools = ("rules.consistency_checks", "llm.complete_json", "case_store.read_artifacts")
+    tools = (
+        "rules.consistency_checks",
+        "llm.complete_json",
+        "case_store.read_artifacts",
+        "evidence.summarize",
+    )
     done_criterion = "an accept/reject/rerun verdict with a confidence and an issue list"
     input_type = MessageType.CONTEXT_VERDICT
     output_type = MessageType.VERIFICATION
@@ -72,27 +106,40 @@ class VerifierAgent(Agent):
         blocking = [i for i in issues if i.severity == "blocking"]
         top = max(motion.per_clip, key=lambda c: c.violence_score)
 
+        top_detections = next(
+            (c for c in detections.per_clip if c.clip_id == top.clip_id), None
+        )
+        summary = ctx.tool(
+            self.name, "evidence.summarize", evidence.summarize, top_detections,
+            fps=getattr(clip_set, "fps", 15.0) or 15.0,
+        )
+
         fallback = self._heuristic_verification(issues, top.violence_score, verdict, ctx)
         result = self.llm.complete_json(
             agent=self.name, ctx=ctx, system=_SYSTEM,
-            prompt=self._build_prompt(clip_set, detections, motion, verdict, issues, ctx),
-            schema_hint=_SCHEMA, mock=fallback, purpose="verify",
+            prompt=self._build_prompt(clip_set, detections, motion, verdict, issues, ctx,
+                                      summary=summary),
+            schema_hint=_SCHEMA, json_schema=_VERIFY_SCHEMA,
+            mock=fallback, purpose="verify",
         )
 
-        llm_issues = [
-            Issue(
-                code=str(raw.get("code", "llm_note"))[:40],
+        # the model often restates a rule finding; keep one entry per code
+        seen_codes = {i.code for i in issues}
+        llm_issues: list[Issue] = []
+        for raw in result.get("issues") or []:
+            if not isinstance(raw, dict):
+                continue
+            code = str(raw.get("code", "llm_note"))[:40]
+            if code in seen_codes:
+                continue
+            seen_codes.add(code)
+            severity = raw.get("severity")
+            llm_issues.append(Issue(
+                code=code,
                 detail=str(raw.get("detail", ""))[:400],
-                severity=(
-                    raw.get("severity")
-                    if raw.get("severity") in {"info", "warning", "blocking"}
-                    else "warning"
-                ),
-            )
-            for raw in (result.get("issues") or [])
-            if isinstance(raw, dict)
-        ][:6]
-        all_issues = issues + llm_issues
+                severity=severity if severity in {"info", "warning", "blocking"} else "warning",
+            ))
+        all_issues = issues + llm_issues[:6]
 
         decision = result.get("verdict")
         if decision not in {"accept", "reject", "rerun"}:
@@ -140,8 +187,8 @@ class VerifierAgent(Agent):
             false_positive_risk=risk,
             issues=all_issues,
             rerun_hint=rerun_hint,
-            reasoning=str(result.get("reasoning", fallback["reasoning"]))[:1200],
-            llm_used=self.llm.provider != "mock",
+            reasoning=str(result.get("reasoning", fallback["reasoning"]))[:2000],
+            llm_used=self.llm.provider != "mock" and not result.get("_llm_fallback"),
         )
 
     # -- deterministic checks -------------------------------------------- #
@@ -273,7 +320,7 @@ class VerifierAgent(Agent):
         }
 
     @staticmethod
-    def _build_prompt(clip_set, detections, motion, verdict, issues, ctx) -> str:
+    def _build_prompt(clip_set, detections, motion, verdict, issues, ctx, summary=None) -> str:
         top = max(motion.per_clip, key=lambda c: c.violence_score)
         top_detections = next(
             (c for c in detections.per_clip if c.clip_id == top.clip_id), None
@@ -295,14 +342,21 @@ EVIDENCE CHAIN
   stage 3 motion: score={top.violence_score:.3f} (threshold {ctx.settings.violence_threshold:.2f})
 {features}
                   scorer rationale: {top.rationale}
+
+{evidence.FEATURE_GUIDE}
+
+{evidence.describe(summary) if summary else ''}
+
   stage 4 context: category={verdict.category}, severity={verdict.severity},
                   policy={', '.join(verdict.policy_refs) or 'none'}
-                  reasoning: {verdict.reasoning[:500]}
+                  reasoning (complete): {verdict.reasoning}
                   literature citations: {len(verdict.citations)}
 
 DETERMINISTIC RULE AUDIT ALREADY PERFORMED:
 {issue_lines}
 
-Decide: accept (the chain supports the verdict), reject (it does not), or rerun
-(a lower detection threshold would plausibly change the evidence). Add any issue
-the rule audit missed. Note that a blocking rule failure cannot be overridden."""
+Decide: accept (the evidence supports the stage-4 verdict), reject (it does not:
+either an alert the evidence does not justify, or a dismissal that overlooks
+strong evidence), or rerun (a lower detection threshold would plausibly change
+the evidence). Add only issues the rule audit missed, in 2-3 sentences of
+reasoning. A blocking rule failure cannot be overridden."""

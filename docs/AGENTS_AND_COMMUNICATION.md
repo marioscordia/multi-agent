@@ -169,16 +169,16 @@ it, never beneath it.
 
 ## 7. Measured communication load
 
-Across all ten scenarios (`tools/load_report.py`, 239 tool and LLM calls):
+Across all ten scenarios (`tools/load_report.py`, 254 tool and LLM calls):
 
 | agent | tool calls | LLM calls | share |
 |---|---:|---:|---:|
-| `MotionAnalystAgent` | 61 | 0 | 25.5% |
-| `VisionDetectorAgent` | 52 | 0 | 21.8% |
-| `PrivacyReportAgent` | 40 | 0 | 16.7% |
-| `IngestAgent` | 38 | 0 | 15.9% |
-| `ContextAgent` | 16 | 8 | 10.0% |
-| `VerifierAgent` | 16 | 8 | 10.0% |
+| `MotionAnalystAgent` | 61 | 0 | 24.0% |
+| `VisionDetectorAgent` | 52 | 0 | 20.5% |
+| `PrivacyReportAgent` | 39 | 0 | 15.4% |
+| `IngestAgent` | 38 | 0 | 15.0% |
+| `ContextAgent` | 24 | 8 | 12.6% |
+| `VerifierAgent` | 24 | 8 | 12.6% |
 | `OrchestratorAgent` | 0 | 0 | 0.0% |
 
 Two observations worth defending:
@@ -187,7 +187,7 @@ Two observations worth defending:
 else, which the specification requires of it. The log is what proves this rather
 than the claim — `test_orchestrator_does_no_domain_work` asserts it on every run.
 
-**The busiest agent holds 25.5%, against a 40% limit.** This was not free. An
+**The busiest agent holds 24.0%, against a 40% limit.** This was not free. An
 early version ran YOLO inference once per frame, which put the
 VisionDetectorAgent at **77.2%** of all calls. Batching inference per clip —
 faster in itself — brought it to 32.6%. Moving identity association from the
@@ -241,4 +241,4 @@ the notes for any case the system has ever handled.
 | Loop safety | one re-run maximum, then a decision; identical input twice aborts |
 | Shared state | `CaseFile` blackboard, persisted to SQLite |
 | Auditability | every call logged by the runtime, secrets scrubbed |
-| Load balance | 25.5% maximum, 0% for the orchestrator |
+| Load balance | 24.0% maximum, 0% for the orchestrator |

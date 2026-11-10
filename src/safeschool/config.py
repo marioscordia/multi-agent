@@ -22,8 +22,8 @@ class Settings(BaseSettings):
 
     # --- LLM ------------------------------------------------------------- #
     llm_provider: str = "anthropic"          # anthropic | mock
-    model: str = "claude-sonnet-5"
-    max_tokens: int = 1200
+    model: str = "claude-sonnet-5-5"
+    max_tokens: int = 16000              # room for adaptive thinking + the JSON answer
     # read from the un-prefixed ANTHROPIC_API_KEY, the name the SDK expects
     anthropic_api_key: str | None = Field(default=None, alias="ANTHROPIC_API_KEY")
 

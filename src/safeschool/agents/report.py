@@ -48,10 +48,15 @@ class PrivacyReportAgent(Agent):
         case_dir.mkdir(parents=True, exist_ok=True)
 
         # --- escalation tier ------------------------------------------- #
-        if verification.verdict == "reject" or verdict.category in {
-            "no_violation", "rough_play_benign"
-        }:
-            tier = "none" if verification.verdict == "reject" else "log"
+        benign = verdict.category in {"no_violation", "rough_play_benign"}
+        if verification.verdict == "reject" and benign:
+            # the Verifier disputes a dismissal: a person should look, but it is
+            # not confirmed enough to trigger an emergency response
+            tier = "notify_staff"
+        elif verification.verdict == "reject":
+            tier = "none"
+        elif benign:
+            tier = "log"
         else:
             tier = ctx.tool(
                 self.name, "policy_kb.escalation_tier",
