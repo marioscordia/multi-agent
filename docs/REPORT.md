@@ -1,3 +1,5 @@
+**Source code:** <https://github.com/marioscordia/multi-agent>
+
 ## 1. Introduction
 
 Schools increasingly have CCTV, but nobody watches it live. A fight in a corridor,
@@ -309,7 +311,11 @@ run the reasoning agents in parallel to cut latency.
 
 ## Appendix: running the system
 
+The full source code, tests and documentation are at
+<https://github.com/marioscordia/multi-agent>.
+
 ```bash
+git clone https://github.com/marioscordia/multi-agent.git && cd multi-agent
 python3 -m venv .venv && .venv/bin/pip install -e ".[cv,dev]"
 cp .env.example .env            # add ANTHROPIC_API_KEY; without it the mock is used
 .venv/bin/python -m safeschool.cli demo          # 10 scenarios
