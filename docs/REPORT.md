@@ -286,8 +286,9 @@ camera.
 - **Rough play versus a fight is hard from motion alone.** The review found this
   to be the dominant false-alarm class; here the policy and the model carry that
   judgement.
-- **Latency.** Each model call takes several seconds, so a case takes around half
-  a minute. That suits after-the-fact review, not real-time intervention.
+- **Latency.** Each model call takes 3 to 6 seconds, so a case takes 11 to 18
+  seconds (median 13). That suits review shortly after an event, not real-time
+  intervention.
 - **The policy is illustrative,** written from the review's safeguarding
   categories; a deployment would need the institution's own policy.
 
